@@ -1,0 +1,70 @@
+---
+- name: Delete old configs
+  ansible.builtin.file:
+    state: absent
+    path: "{{ netbox_config_path }}"
+
+- name: Ensure directory exists
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+  - "{{ netbox_config_path }}"
+  - "{{ netbox_db_data_dir }}"
+  - "{{ netbox_redis_data_dir }}"
+
+# tasks file for ansible-netbox
+- name: Start NetBox docker compose
+  docker_compose:
+    state: present
+    project_name: NetBox
+    definition:
+      version: '3.5'
+      services:
+        netbox:
+          image: "lscr.io/linuxserver/netbox:{{ netbox_image_tag }}"
+          container_name: "{{ netbox_container_name }}"
+          environment:
+            - PUID=1000
+            - PGID=1000
+            - TZ=Etc/UTC
+            - "SUPERUSER_EMAIL={{ netbox_superuser_email }}"
+            - "SUPERUSER_PASSWORD={{ netbox_superuser_password }}"
+            - "ALLOWED_HOST={{ netbox_allowed_host }}"
+            - "DB_NAME={{ netbox_db_name }}"
+            - "DB_USER={{ netbox_db_user }}"
+            - "DB_PASSWORD={{ netbox_db_password }}"
+            - "DB_HOST={{ netbox_db_host }}"
+            - "DB_PORT={{ netbox_db_port }}"
+            - "REDIS_HOST={{ netbox_redis_host }}"
+            - "REDIS_PORT={{ netbox_redis_port }}"
+            - "REDIS_DB_TASK={{ netbox_redis_db_task }}"
+            - "REDIS_DB_CACHE={{ netbox_redis_db_cache }}"
+            - "REMOTE_AUTH_ENABLED={{ netbox_remote_auth_enabled }}" 
+            - "REMOTE_AUTH_BACKEND={{ netbox_remote_auth_backend }}"
+            - "REMOTE_AUTH_HEADER={{ netbox_remote_auth_header }}"
+            - "REMOTE_AUTH_AUTO_CREATE_USER={{ netbox_remote_auth_auto_create_user }}"
+          volumes:
+            - "{{ netbox_config_path }}:/config"
+          ports:
+            - "{{ netbox_listen_address }}:{{ netbox_listen_port }}:8000"
+          restart: unless-stopped
+
+        db:
+          image: postgres:12
+          restart: unless-stopped
+          container_name: "{{ netbox_db_host }}"
+          volumes:
+            - "{{ netbox_db_data_dir }}:/var/lib/postgresql/data"
+          environment:
+            - "POSTGRES_PASSWORD={{ netbox_db_password }}"
+            - "POSTGRES_USER={{ netbox_db_user }}"
+            - "POSTGRES_DB={{ netbox_db_name }}"
+
+        redis:
+          image: redis:7.4
+          container_name: "{{ netbox_redis_host }}"
+          restart: unless-stopped
+          volumes:
+            - "{{ netbox_redis_data_dir }}:/var/lib/redis"
